@@ -1,0 +1,150 @@
+// ============================================================
+// SISGESC — DBDIAGRAM (DBML)
+// ============================================================
+
+// =========================
+// OLTP — Tabelas operacionais
+// =========================
+
+Table Turno {
+  id int[pk, increment]
+  nomev archar(50)
+}
+
+Table StatusMatricula {
+  id int[pk, increment]
+  nome varchar(50)
+}
+
+Table StatusMensalidade {
+  id int [pk, increment]
+  nome varchar(50)
+}
+
+Table Funcionario {
+  id char (36)    [pk]
+  nome varchar(150)
+  cpf varchar(11)
+  email varchar(255)
+  cargo varchar(100)
+}
+
+Table Professor {
+  id char(36)    [pk]
+  nome varchar(150)
+  cpf varchar(11)
+  email varchar(255)
+}
+
+Table Aluno {
+  id char(36)[pk]
+  nome varchar(150)
+  cpf varchar(11)
+  email varchar(255)
+  data_nascimento date
+}
+
+Table Disciplina {
+  id char(36)[pk]
+  nome varchar(150)
+  carga_horaria int
+}
+
+Table Turma {
+  id char(36) [pk]
+  disciplina_id char(36) [ref: > Disciplina.id]
+  turno_id int [ref: > Turno.id]
+  ano int
+  semestre int
+}
+
+Table ProfessorTurma {
+  professor_id char(36)[ref: > Professor.id]
+  turma_id char(36) [ref: > Turma.id]
+
+  indexes {
+    (professor_id, turma_id) [pk]
+  }
+}
+
+Table Matricula {
+  id char(36) [pk]
+  aluno_id char(36) [ref: > Aluno.id]
+  turma_id char(36) [ref: > Turma.id]
+  status_id int [ref: > StatusMatricula.id]
+  data_matricula date
+}
+
+Table Contrato {
+  id char(36) [pk]
+  matricula_id char(36)[ref: > Matricula.id]
+  valor_total decimal(10,2)
+  qtd_parcelas int
+  data_assinatura date
+}
+
+Table Mensalidade {
+  id char(36) [pk]
+  contrato_id char(36) [ref: > Contrato.id]
+  status_id int [ref: > StatusMensalidade.id]
+  valor decimal(10,2)
+  data_vencimento date
+  data_pagamento date
+}
+
+// =========================
+// OLAP — Dimensões e Fato
+// =========================
+
+Table dim_tempo {
+  sk_tempo int [pk, increment]
+  data_completa date [unique]
+  ano int
+  semestre int
+  mes int
+  nome_mes varchar(20)
+  trimestre varchar(10)
+  dia int
+}
+
+Table dim_aluno {
+  sk_aluno bigint [pk, increment]
+  id_oltp char(36)[unique]
+  nome varchar(150)
+  cpf varchar(11)
+  email varchar(255)
+}
+
+Table dim_disciplina {
+  sk_disciplina  int[pk, increment]
+  id_oltp char(36)
+  nome varchar(150)
+  carga_horaria  int
+  ano_turma int
+  semestre_turma int
+}
+
+Table dim_turno {
+  sk_turno int[pk,increment]
+  id_oltp  int
+  nome varchar(50)
+}
+
+Table dim_status_mensalidade {
+  sk_status int[pk,increment]
+  id_oltp int
+  nome varchar(50)
+}
+
+Table fato_financeiro {
+  sk_fato int [pk,increment]
+  sk_tempo  int [ref: > dim_tempo.sk_tempo]
+  sk_aluno bigint [ref: > dim_aluno.sk_aluno]
+  sk_disciplina int [ref: > dim_disciplina.sk_disciplina]
+  sk_turno int [ref: > dim_turno.sk_turno]
+  sk_status int [ref: > dim_status_mensalidade.sk_status]
+  valor_mensalidade decimal(10,2)
+  valor_contrato decimal(10,2)
+  qtd_parcelas int
+  id_mensalidade_oltpcha r(36)
+}
