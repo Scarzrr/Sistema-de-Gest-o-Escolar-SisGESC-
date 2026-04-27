@@ -1,0 +1,158 @@
+-- ============================================================
+-- SISGESC — SCRIPT COMPLETO (MySQL / Workbench) — FINAL
+-- ============================================================
+
+SET FOREIGN_KEY_CHECKS = 0;
+SET SQL_MODE = 'STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION';
+
+-- RESET
+DROP TABLE IF EXISTS fato_financeiro;
+DROP TABLE IF EXISTS dim_tempo;
+DROP TABLE IF EXISTS dim_aluno;
+DROP TABLE IF EXISTS dim_disciplina;
+DROP TABLE IF EXISTS dim_turno;
+DROP TABLE IF EXISTS dim_status_mensalidade;
+DROP TABLE IF EXISTS Mensalidade;
+DROP TABLE IF EXISTS Contrato;
+DROP TABLE IF EXISTS Matricula;
+DROP TABLE IF EXISTS ProfessorTurma;
+DROP TABLE IF EXISTS Turma;
+DROP TABLE IF EXISTS Disciplina;
+DROP TABLE IF EXISTS Aluno;
+DROP TABLE IF EXISTS Professor;
+DROP TABLE IF EXISTS Funcionario;
+DROP TABLE IF EXISTS StatusMensalidade;
+DROP TABLE IF EXISTS StatusMatricula;
+DROP TABLE IF EXISTS Turno;
+
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- =========================
+-- DIMENSÕES OLAP (CORRIGIDO)
+-- =========================
+
+CREATE TABLE dim_tempo (
+  sk_tempo INT NOT NULL AUTO_INCREMENT,
+  data_completa DATE NOT NULL,
+  ano INT NOT NULL,
+  semestre INT NOT NULL,
+  mes INT NOT NULL,
+  nome_mes VARCHAR(20) NOT NULL,
+  trimestre VARCHAR(10) NOT NULL,
+  dia INT NOT NULL,
+  PRIMARY KEY (sk_tempo),
+  UNIQUE KEY (data_completa)
+) ENGINE=InnoDB;
+
+CREATE TABLE dim_aluno (
+  sk_aluno BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  id_oltp CHAR(36) NOT NULL,
+  nome VARCHAR(150),
+  cpf VARCHAR(11),
+  email VARCHAR(255),
+  PRIMARY KEY (sk_aluno),
+  UNIQUE KEY (id_oltp)
+) ENGINE=InnoDB;
+
+CREATE TABLE dim_disciplina (
+  sk_disciplina INT NOT NULL AUTO_INCREMENT,
+  id_oltp CHAR(36),
+  nome VARCHAR(150),
+  carga_horaria INT,
+  ano_turma INT,
+  semestre_turma INT,
+  PRIMARY KEY (sk_disciplina)
+) ENGINE=InnoDB;
+
+CREATE TABLE dim_turno (
+  sk_turno INT NOT NULL AUTO_INCREMENT,
+  id_oltp INT,
+  nome VARCHAR(50),
+  PRIMARY KEY (sk_turno)
+) ENGINE=InnoDB;
+
+CREATE TABLE dim_status_mensalidade (
+  sk_status INT NOT NULL AUTO_INCREMENT,
+  id_oltp INT,
+  nome VARCHAR(50),
+  PRIMARY KEY (sk_status)
+) ENGINE=InnoDB;
+
+CREATE TABLE fato_financeiro (
+  sk_fato INT NOT NULL AUTO_INCREMENT,
+  sk_tempo INT,
+  sk_aluno BIGINT UNSIGNED,
+  sk_disciplina INT,
+  sk_turno INT,
+  sk_status INT,
+  valor_mensalidade DECIMAL(10,2),
+  valor_contrato DECIMAL(10,2),
+  qtd_parcelas INT,
+  id_mensalidade_oltp CHAR(36),
+  PRIMARY KEY (sk_fato),
+
+  FOREIGN KEY (sk_tempo) REFERENCES dim_tempo(sk_tempo),
+  FOREIGN KEY (sk_aluno) REFERENCES dim_aluno(sk_aluno),
+  FOREIGN KEY (sk_disciplina) REFERENCES dim_disciplina(sk_disciplina),
+  FOREIGN KEY (sk_turno) REFERENCES dim_turno(sk_turno),
+  FOREIGN KEY (sk_status) REFERENCES dim_status_mensalidade(sk_status)
+) ENGINE=InnoDB;
+
+-- =========================
+-- ETL (AJUSTADO)
+-- =========================
+
+INSERT IGNORE INTO dim_tempo
+SELECT DISTINCT
+  NULL,
+  m.data_vencimento,
+  YEAR(m.data_vencimento),
+  IF(MONTH(m.data_vencimento) <= 6,1,2),
+  MONTH(m.data_vencimento),
+  MONTHNAME(m.data_vencimento),
+  CONCAT('T',QUARTER(m.data_vencimento)),
+  DAY(m.data_vencimento)
+FROM Mensalidade m;
+
+INSERT IGNORE INTO dim_aluno
+SELECT NULL, id, nome, cpf, email FROM Aluno;
+
+INSERT IGNORE INTO dim_disciplina
+SELECT DISTINCT
+  NULL,
+  d.id,
+  d.nome,
+  d.carga_horaria,
+  t.ano,
+  t.semestre
+FROM Disciplina d
+JOIN Turma t ON t.disciplina_id = d.id;
+
+INSERT IGNORE INTO dim_turno
+SELECT NULL, id, nome FROM Turno;
+
+INSERT IGNORE INTO dim_status_mensalidade
+SELECT NULL, id, nome FROM StatusMensalidade;
+
+INSERT IGNORE INTO fato_financeiro
+SELECT
+  NULL,
+  dt.sk_tempo,
+  da.sk_aluno,
+  dd.sk_disciplina,
+  dtu.sk_turno,
+  ds.sk_status,
+  m.valor,
+  c.valor_total,
+  (SELECT COUNT(*) FROM Mensalidade m2 WHERE m2.contrato_id = c.id),
+  m.id
+  
+FROM Mensalidade m
+JOIN Contrato c ON c.id = m.contrato_id
+JOIN Matricula mt ON mt.id = c.matricula_id
+JOIN Turma t ON t.id = mt.turma_id
+JOIN dim_tempo dt ON dt.data_completa = m.data_vencimento
+JOIN dim_aluno da ON da.id_oltp = mt.aluno_id
+JOIN dim_disciplina dd ON dd.id_oltp = t.disciplina_id
+JOIN dim_turno dtu ON dtu.id_oltp = t.turno_id
+JOIN dim_status_mensalidade ds ON ds.id_oltp = m.status_id;
