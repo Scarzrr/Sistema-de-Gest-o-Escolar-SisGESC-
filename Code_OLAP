@@ -1,0 +1,63 @@
+////////OLAP/////////
+
+Table dim_tempo {
+  sk_tempo      int         [pk, increment, not null]
+  data_completa date        [not null, unique]
+  ano           int         [not null]
+  semestre      int         [not null]
+  mes           int         [not null]
+  nome_mes      varchar(20) [not null]
+  trimestre     varchar(10) [not null]
+  dia           int         [not null]
+  Note: 'Dimensão Tempo: granularidade diária'
+}
+
+Table dim_aluno {
+  sk_aluno bigint       [pk, increment, not null, note: 'BIGINT UNSIGNED']
+  id_oltp  char(36)     [not null, unique]
+  nome     varchar(150) [not null]
+  cpf      varchar(11)  [not null]
+  email    varchar(255) [not null]
+  Note: 'Dimensão Aluno: snapshot no momento da carga ETL'
+}
+
+Table dim_disciplina {
+  sk_disciplina  int          [pk, increment, not null]
+  id_oltp        char(36)     [not null]
+  nome           varchar(150) [not null]
+  carga_horaria  int          [not null]
+  ano_turma      int          [not null]
+  semestre_turma int          [not null]
+  indexes {
+    (id_oltp, ano_turma, semestre_turma) [unique, name: 'uq_dim_disc']
+  }
+  Note: 'Dimensão Disciplina: disciplina + período da turma'
+}
+
+Table dim_turno {
+  sk_turno int         [pk, increment, not null]
+  id_oltp  int         [not null, unique]
+  nome     varchar(50) [not null]
+  Note: 'Dimensão Turno'
+}
+
+Table dim_status_mensalidade {
+  sk_status int         [pk, increment, not null]
+  id_oltp   int         [not null, unique]
+  nome      varchar(50) [not null]
+  Note: 'Dimensão Status Mensalidade'
+}
+
+Table fato_financeiro {
+  sk_fato             int           [pk, increment, not null]
+  sk_tempo            int           [not null, ref: > dim_tempo.sk_tempo]
+  sk_aluno            bigint        [not null, ref: > dim_aluno.sk_aluno]
+  sk_disciplina       int           [not null, ref: > dim_disciplina.sk_disciplina]
+  sk_turno            int           [not null, ref: > dim_turno.sk_turno]
+  sk_status           int           [not null, ref: > dim_status_mensalidade.sk_status]
+  valor_mensalidade   decimal(10,2) [not null, note: 'Medida: valor da parcela']
+  valor_contrato      decimal(10,2) [not null, note: 'Medida: valor total do contrato']
+  qtd_parcelas        int           [not null, note: 'Medida: total de parcelas']
+  id_mensalidade_oltp char(36)      [not null, unique, note: 'Rastreabilidade OLTP→OLAP']
+  Note: 'Fato Financeiro | Granularidade: 1 linha = 1 mensalidade por aluno por turma'
+}
