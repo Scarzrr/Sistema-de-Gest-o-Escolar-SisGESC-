@@ -1,0 +1,169 @@
+////////OLTP/////////
+
+Table tb_status_matricula {
+  id   int                                          [pk, increment, not null]
+  nome enum('Ativa','Trancada','Cancelada','Concluída') [not null, unique]
+  Note: 'Domínio: situação da matrícula do aluno'
+}
+
+Table tb_status_mensalidade {
+  id   int                                              [pk, increment, not null]
+  nome enum('Pendente','Paga','Atrasada','Cancelada')   [not null, unique]
+  Note: 'Domínio: situação de pagamento da parcela'
+}
+
+Table tb_turno {
+  id   int                                                    [pk, increment, not null]
+  nome enum('Matutino','Vespertino','Noturno','Integral')     [not null, unique]
+  Note: 'Domínio: turno da turma'
+}
+
+Table tb_cargo {
+  id    int                                          [pk, increment, not null]
+  nome  varchar(100)                                 [not null, unique]
+  nivel enum('Operacional','Tático','Estratégico')   [not null]
+  cbo   varchar(10)                                  [note: 'Código Brasileiro de Ocupações']
+  Note: 'RH: cargos com nível hierárquico'
+}
+
+Table tb_funcionario {
+  id          char(36)      [pk, not null]
+  nome        varchar(150)  [not null]
+  cpf         varchar(11)   [not null, unique]
+  email       varchar(255)  [not null, unique]
+  cargo_id    int           [not null, ref: > tb_cargo.id]
+  salario     decimal(10,2) [not null, note: 'CHECK: salario >= 0']
+  dt_admissao date          [not null]
+  ativo       tinyint(1)    [not null, default: 1]
+  Note: 'RH: funcionário com cargo e dados de admissão'
+}
+
+Table tb_professor {
+  id             char(36)     [pk, not null]
+  funcionario_id char(36)     [not null, unique, ref: > tb_funcionario.id]
+  especialidade  varchar(150)
+  titulacao      enum('Graduação','Especialização','Mestrado','Doutorado') [not null, default: 'Graduação']
+  Note: 'RH: professor vinculado a um funcionário'
+}
+
+Table tb_folha_pagamento {
+  id               char(36)      [pk, not null]
+  funcionario_id   char(36)      [not null, ref: > tb_funcionario.id]
+  competencia      date          [not null, note: 'Primeiro dia do mês de referência']
+  salario_bruto    decimal(10,2) [not null, note: 'CHECK: >= 0']
+  desconto_inss    decimal(10,2) [not null, default: 0]
+  desconto_irrf    decimal(10,2) [not null, default: 0]
+  outros_descontos decimal(10,2) [not null, default: 0]
+  salario_liquido  decimal(10,2) [not null, note: 'CHECK: >= 0']
+  dt_pagamento     date
+  status           enum('Aberta','Processada','Paga','Cancelada') [not null, default: 'Aberta']
+  indexes {
+    (funcionario_id, competencia) [unique, name: 'uq_folha_func_competencia']
+  }
+  Note: 'RH: folha de pagamento mensal por funcionário'
+}
+
+Table tb_aluno {
+  id            char(36)     [pk, not null]
+  nome          varchar(150) [not null]
+  cpf           varchar(11)  [not null, unique]
+  email         varchar(255) [not null, unique]
+  dt_nascimento date
+  dt_ingresso   date         [not null]
+  ativo         tinyint(1)   [not null, default: 1]
+  Note: 'Acadêmico: aluno matriculado'
+}
+
+Table tb_disciplina {
+  id            char(36)     [pk, not null]
+  nome          varchar(150) [not null]
+  carga_horaria int          [not null, note: 'CHECK: > 0']
+  creditos      int          [not null, default: 4, note: 'CHECK: > 0']
+  ementa        text
+  Note: 'Acadêmico: disciplina ofertada'
+}
+
+Table tb_turma {
+  id            char(36) [pk, not null]
+  disciplina_id char(36) [not null, ref: > tb_disciplina.id]
+  ano           int      [not null, note: 'CHECK: >= 2000']
+  semestre      int      [not null, note: 'CHECK: IN (1,2)']
+  turno_id      int      [not null, ref: > tb_turno.id]
+  vagas         int      [not null, default: 40, note: 'CHECK: > 0']
+  indexes {
+    (disciplina_id, ano, semestre, turno_id) [unique, name: 'uq_turma_periodo']
+  }
+  Note: 'Acadêmico: oferta de disciplina em período e turno'
+}
+
+Table tb_professor_turma {
+  id           char(36) [pk, not null]
+  professor_id char(36) [not null, ref: > tb_professor.id]
+  turma_id     char(36) [not null, ref: > tb_turma.id]
+  indexes {
+    (professor_id, turma_id) [unique, name: 'uq_prof_turma']
+  }
+  Note: 'Acadêmico: N:N professor × turma'
+}
+
+Table tb_matricula {
+  id             char(36) [pk, not null]
+  aluno_id       char(36) [not null, ref: > tb_aluno.id]
+  turma_id       char(36) [not null, ref: > tb_turma.id]
+  data_matricula date     [not null]
+  status_id      int      [not null, ref: > tb_status_matricula.id]
+  indexes {
+    (aluno_id, turma_id) [unique, name: 'uq_matricula_aluno_turma']
+  }
+  Note: 'Acadêmico: vínculo aluno × turma com status'
+}
+
+Table tb_falta {
+  id           char(36)   [pk, not null]
+  matricula_id char(36)   [not null, ref: > tb_matricula.id]
+  data_aula    date       [not null]
+  justificada  tinyint(1) [not null, default: 0]
+  observacao   varchar(255)
+  indexes {
+    (matricula_id, data_aula) [unique, name: 'uq_falta_matricula_data']
+  }
+  Note: 'Acadêmico: registro de faltas por matrícula'
+}
+
+Table tb_nota {
+  id            char(36)     [pk, not null]
+  matricula_id  char(36)     [not null, ref: > tb_matricula.id]
+  tipo          enum('AV1','AV2','AV3','Recuperação','Final') [not null]
+  valor         decimal(4,2) [not null, note: 'CHECK: >= 0 AND <= 10']
+  dt_lancamento date         [not null]
+  indexes {
+    (matricula_id, tipo) [unique, name: 'uq_nota_matricula_tipo']
+  }
+  Note: 'Acadêmico: notas por avaliação por matrícula'
+}
+
+Table tb_contrato {
+  id             char(36)      [pk, not null]
+  matricula_id   char(36)      [not null, unique, ref: > tb_matricula.id]
+  data_inicio    date          [not null]
+  valor_total    decimal(10,2) [not null, note: 'CHECK: >= 0']
+  dt_criacao     datetime      [not null, default: `CURRENT_TIMESTAMP`]
+  dt_atualizacao datetime      [not null, default: `CURRENT_TIMESTAMP`]
+  Note: 'Financeiro: contrato vinculado à matrícula (1:1) | ON DELETE RESTRICT'
+}
+
+Table tb_mensalidade {
+  id              char(36)      [pk, not null]
+  contrato_id     char(36)      [not null, ref: > tb_contrato.id]
+  valor           decimal(10,2) [not null, note: 'CHECK: >= 0']
+  data_vencimento date          [not null]
+  data_pagamento  date
+  status_id       int           [not null, ref: > tb_status_mensalidade.id]
+  dt_criacao      datetime      [not null, default: `CURRENT_TIMESTAMP`]
+  dt_atualizacao  datetime      [not null, default: `CURRENT_TIMESTAMP`]
+  indexes {
+    (contrato_id, data_vencimento) [unique, name: 'uq_parcela']
+  }
+  Note: 'Financeiro: parcela mensal | ON DELETE RESTRICT | trilha de auditoria'
+}
+
