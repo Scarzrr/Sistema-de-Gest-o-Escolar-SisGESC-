@@ -1,0 +1,148 @@
+/////////ETL////////////
+
+Table src_tb_mensalidade {
+  id              char(36)      [pk]
+  contrato_id     char(36)
+  valor           decimal(10,2)
+  data_vencimento date
+  status_id       int
+  Note: 'ETL Etapas 1 e 6 — origem: datas, medidas e status'
+}
+
+Table src_tb_contrato {
+  id           char(36)      [pk]
+  matricula_id char(36)
+  data_inicio  date
+  valor_total  decimal(10,2)
+  Note: 'ETL Etapa 6 — origem: valor_contrato e qtd_parcelas'
+}
+
+Table src_tb_matricula {
+  id             char(36) [pk]
+  aluno_id       char(36)
+  turma_id       char(36)
+  data_matricula date
+  status_id      int
+  Note: 'ETL Etapa 6 — origem: resolve aluno e turma'
+}
+
+Table src_tb_aluno {
+  id    char(36)     [pk]
+  nome  varchar(150)
+  cpf   varchar(11)
+  email varchar(255)
+  Note: 'ETL Etapa 2 — origem: alimenta dim_aluno'
+}
+
+Table src_tb_disciplina {
+  id            char(36)     [pk]
+  nome          varchar(150)
+  carga_horaria int
+  Note: 'ETL Etapa 3 — origem: alimenta dim_disciplina'
+}
+
+Table src_tb_turma {
+  id            char(36) [pk]
+  disciplina_id char(36)
+  ano           int
+  semestre      int
+  turno_id      int
+  Note: 'ETL Etapas 3 e 4 — origem: alimenta dim_disciplina e dim_turno'
+}
+
+Table src_tb_turno {
+  id   int         [pk]
+  nome varchar(50)
+  Note: 'ETL Etapa 4 — origem: alimenta dim_turno'
+}
+
+Table src_tb_status_mensalidade {
+  id   int         [pk]
+  nome varchar(50)
+  Note: 'ETL Etapa 5 — origem: alimenta dim_status_mensalidade'
+}
+
+Table dest_dim_tempo {
+  sk_tempo      int  [pk]
+  data_completa date [unique]
+  ano           int
+  semestre      int
+  mes           int
+  nome_mes      varchar(20)
+  trimestre     varchar(10)
+  dia           int
+  Note: 'ETL Destino — Etapa 1: INSERT IGNORE via data_vencimento'
+}
+
+Table dest_dim_aluno {
+  sk_aluno bigint      [pk]
+  id_oltp  char(36)    [unique]
+  nome     varchar(150)
+  cpf      varchar(11)
+  email    varchar(255)
+  Note: 'ETL Destino — Etapa 2: INSERT IGNORE de src_tb_aluno'
+}
+
+Table dest_dim_disciplina {
+  sk_disciplina  int      [pk]
+  id_oltp        char(36)
+  nome           varchar(150)
+  carga_horaria  int
+  ano_turma      int
+  semestre_turma int
+  Note: 'ETL Destino — Etapa 3: JOIN src_tb_disciplina + src_tb_turma'
+}
+
+Table dest_dim_turno {
+  sk_turno int         [pk]
+  id_oltp  int         [unique]
+  nome     varchar(50)
+  Note: 'ETL Destino — Etapa 4: INSERT IGNORE de src_tb_turno'
+}
+
+Table dest_dim_status {
+  sk_status int         [pk]
+  id_oltp   int         [unique]
+  nome      varchar(50)
+  Note: 'ETL Destino — Etapa 5: INSERT IGNORE de src_tb_status_mensalidade'
+}
+
+Table dest_fato_financeiro {
+  sk_fato             int           [pk]
+  sk_tempo            int
+  sk_aluno            bigint
+  sk_disciplina       int
+  sk_turno            int
+  sk_status           int
+  valor_mensalidade   decimal(10,2)
+  valor_contrato      decimal(10,2)
+  qtd_parcelas        int
+  id_mensalidade_oltp char(36)      [unique]
+  Note: 'ETL Destino — Etapa 6: JOIN todas as dims por SK | INSERT IGNORE'
+}
+
+// Etapa 1 — dim_tempo
+Ref etl_1: src_tb_mensalidade.data_vencimento > dest_dim_tempo.data_completa
+
+// Etapa 2 — dim_aluno
+Ref etl_2: src_tb_aluno.id > dest_dim_aluno.id_oltp
+
+// Etapa 3 — dim_disciplina
+Ref etl_3a: src_tb_disciplina.id > dest_dim_disciplina.id_oltp
+Ref etl_3b: src_tb_turma.disciplina_id > dest_dim_disciplina.id_oltp
+
+// Etapa 4 — dim_turno
+Ref etl_4: src_tb_turno.id > dest_dim_turno.id_oltp
+
+// Etapa 5 — dim_status
+Ref etl_5: src_tb_status_mensalidade.id > dest_dim_status.id_oltp
+
+// Etapa 6 — fato_financeiro
+Ref etl_6a: src_tb_mensalidade.id > dest_fato_financeiro.id_mensalidade_oltp
+Ref etl_6b: src_tb_contrato.id > dest_fato_financeiro.valor_contrato
+Ref etl_6c: src_tb_matricula.aluno_id > dest_fato_financeiro.sk_aluno
+Ref etl_6d: dest_dim_tempo.sk_tempo > dest_fato_financeiro.sk_tempo
+Ref etl_6e: dest_dim_aluno.sk_aluno > dest_fato_financeiro.sk_aluno
+Ref etl_6f: dest_dim_disciplina.sk_disciplina > dest_fato_financeiro.sk_disciplina
+Ref etl_6g: dest_dim_turno.sk_turno > dest_fato_financeiro.sk_turno
+Ref etl_6h: dest_dim_status.sk_status > dest_fato_financeiro.sk_status
